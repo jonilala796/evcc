@@ -1,8 +1,10 @@
-const { test, expect } = require("@playwright/test");
-const { start, stop } = require("./evcc");
+import { test, expect } from "@playwright/test";
+import { start, stop, baseUrl } from "./evcc";
+
+test.use({ baseURL: baseUrl() });
 
 test.beforeAll(async () => {
-  await start("basics.evcc.yaml");
+  await start("basics.evcc.yaml", "password.sql");
 });
 test.afterAll(async () => {
   await stop();
@@ -54,5 +56,20 @@ test.describe("session info", async () => {
     await expect(page.getByTestId("sessionInfoLabel").first()).toContainText("Solar");
     await page.reload();
     await expect(page.getByTestId("sessionInfoLabel").first()).toContainText("Solar");
+  });
+});
+
+test.describe("loadpoint settings", async () => {
+  test("phase selection", async ({ page }) => {
+    await page.getByTestId("loadpoint-settings-button").nth(1).click();
+    await expect(page.getByLabel("auto-switching")).not.toBeVisible();
+    await expect(page.getByLabel("3 phase")).toBeChecked();
+    await expect(page.getByLabel("1 phase")).not.toBeChecked();
+    await expect(page.getByText("~ 11.0 kW")).toBeVisible();
+    await expect(page.getByText("~ 4.1 kW")).toBeVisible();
+
+    await page.getByLabel("1 phase").click();
+    await expect(page.getByText("~ 3.7 kW")).toBeVisible();
+    await expect(page.getByText("~ 1.4 kW")).toBeVisible();
   });
 });

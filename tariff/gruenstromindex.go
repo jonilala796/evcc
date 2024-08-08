@@ -14,11 +14,9 @@ import (
 )
 
 type GrünStromIndex struct {
-	log     *util.Logger
-	mux     sync.Mutex
-	zip     string
-	data    api.Rates
-	updated time.Time
+	log  *util.Logger
+	zip  string
+	data *util.Monitor[api.Rates]
 }
 
 type gsiForecast struct {
@@ -76,8 +74,9 @@ func NewGrünStromIndexFromConfig(other map[string]interface{}) (api.Tariff, err
 	log := util.NewLogger("gsi").Redact(cc.Zip)
 
 	t := &GrünStromIndex{
-		log: log,
-		zip: cc.Zip,
+		log:  log,
+		zip:  cc.Zip,
+		data: util.NewMonitor[api.Rates](2 * time.Hour),
 	}
 
 	done := make(chan error)
@@ -93,11 +92,12 @@ func (t *GrünStromIndex) run(done chan error) {
 	bo := newBackoff()
 	uri := fmt.Sprintf("https://api.corrently.io/v2.0/gsi/prediction?zip=%s", t.zip)
 
-	for ; true; <-time.Tick(time.Hour) {
+	tick := time.NewTicker(time.Hour)
+	for ; true; <-tick.C {
 		var res gsiForecast
 
 		err := backoff.Retry(func() error {
-			return client.GetJSON(uri, &res)
+			return backoffPermanentError(client.GetJSON(uri, &res))
 		}, bo)
 
 		if err == nil && res.Err {
@@ -115,29 +115,28 @@ func (t *GrünStromIndex) run(done chan error) {
 			continue
 		}
 
-		once.Do(func() { close(done) })
-
-		t.mux.Lock()
-		t.updated = time.Now()
-
-		t.data = make(api.Rates, 0, len(res.Forecast))
+		data := make(api.Rates, 0, len(res.Forecast))
 		for _, r := range res.Forecast {
-			t.data = append(t.data, api.Rate{
+			data = append(data, api.Rate{
 				Price: float64(r.Co2GStandard),
 				Start: time.UnixMilli(r.Timeframe.Start).Local(),
 				End:   time.UnixMilli(r.Timeframe.End).Local(),
 			})
 		}
+		data.Sort()
 
-		t.mux.Unlock()
+		t.data.Set(data)
+		once.Do(func() { close(done) })
 	}
 }
 
 // Rates implements the api.Tariff interface
 func (t *GrünStromIndex) Rates() (api.Rates, error) {
-	t.mux.Lock()
-	defer t.mux.Unlock()
-	return slices.Clone(t.data), outdatedError(t.updated, time.Hour)
+	var res api.Rates
+	err := t.data.GetFunc(func(val api.Rates) {
+		res = slices.Clone(val)
+	})
+	return res, err
 }
 
 // Type implements the api.Tariff interface

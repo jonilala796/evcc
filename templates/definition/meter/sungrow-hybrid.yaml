@@ -4,10 +4,11 @@ products:
   - brand: Sungrow
     description:
       generic: SH Series Hybrid Inverter
+capabilities: ["battery-control"]
 requirements:
   description:
-    de: Die Verbindung ist seriell (RS485) oder über die native (hintere) LAN-Buchse am Wechselrichter möglich. Verbindungen über das WiNet-S-Dongle (WiFi oder LAN) funktionieren NICHT korrekt.
-    en: The connection can be serial (RS485) or via the native (rear) LAN socket on the inverter. Connections via the WiNet-S dongle (WiFi or LAN) do NOT work correctly.
+    de: Verbindungen über das WiNet-S-Dongle (WiFi oder LAN) funktionieren nur mit aktueller Firmware.
+    en: Connections via the WiNet-S dongle (WiFi or LAN) only work with the latest firmware.
 params:
   - name: usage
     choice: ["grid", "pv", "battery"]
@@ -15,6 +16,7 @@ params:
   - name: modbus
     choice: ["rs485", "tcpip"]
     baudrate: 9600
+  - name: timeout
   - name: capacity
     advanced: true
 render: |
@@ -97,6 +99,106 @@ render: |
       type: input
       decode: int16
     scale: 0.1
+  batterymode:
+    source: switch
+    switch:
+    - case: 1 # normal
+      set:
+        source: sequence
+        set:
+        - source: const
+          value: 0 # Self-consumption mode (Default)
+          set:
+            source: modbus
+            {{- include "modbus" . | indent 10 }}
+            timeout: {{ .timeout }}
+            register:
+              address: 13049 # EMS mode selection
+              type: writesingle
+              decode: uint16
+        - source: const
+          value: 0xCC # Stop (Default)
+          set:
+            source: modbus
+            {{- include "modbus" . | indent 10 }}
+            timeout: {{ .timeout }}
+            register:
+              address: 13050 # Charge/discharge command
+              type: writesingle
+              decode: uint16
+    - case: 2 # hold
+      set:
+        source: sequence
+        set:
+        - source: const
+          value: 2 # Forced mode (charge/discharge/stop)
+          set:
+            source: modbus
+            {{- include "modbus" . | indent 10 }}
+            timeout: {{ .timeout }}
+            register:
+              address: 13049 # EMS mode selection
+              type: writesingle
+              decode: uint16
+        - source: const
+          value: 0xCC # Stop (Default)
+          set:
+            source: modbus
+            {{- include "modbus" . | indent 10 }}
+            timeout: {{ .timeout }}
+            register:
+              address: 13050 # Charge/discharge command
+              type: writesingle
+              decode: uint16
+    - case: 3 # charge
+      set:
+        source: sequence
+        set:
+        - source: const
+          value: 2 # Forced mode (charge/discharge/stop)
+          set:
+            source: modbus
+            {{- include "modbus" . | indent 10 }}
+            timeout: {{ .timeout }}
+            register:
+              address: 13049 # EMS mode
+              type: writesingle
+              decode: uint16
+        - source: const
+          value: 0xAA # Charge
+          set:
+            source: modbus
+            {{- include "modbus" . | indent 10 }}
+            timeout: {{ .timeout }}
+            register:
+              address: 13050 # Charge/discharge command
+              type: writesingle
+              decode: uint16
+        - source: go
+          script: power
+          in:
+          - name: power
+            type: int
+            config:
+              source: modbus
+              {{- include "modbus" . | indent 12 }}
+              timeout: {{ .timeout }}
+              register:
+                address: 5627 # BDC rated power
+                type: input
+                decode: uint16
+              scale: 100
+          out:
+          - name: power
+            type: int
+            config:
+              source: modbus
+              {{- include "modbus" . | indent 12 }}
+              timeout: {{ .timeout }}
+              register:
+                address: 13051 # Charge/discharge power
+                type: writesingle
+                decode: uint16
   {{- if .capacity }}
   capacity: {{ .capacity }} # kWh
   {{- end }}

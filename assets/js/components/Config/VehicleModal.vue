@@ -8,6 +8,7 @@
 			tabindex="-1"
 			role="dialog"
 			aria-hidden="true"
+			data-testid="vehicle-modal"
 		>
 			<div class="modal-dialog modal-dialog-centered" role="document">
 				<div class="modal-content">
@@ -28,9 +29,9 @@
 								<select
 									id="vehicleTemplate"
 									v-model="templateName"
+									@change="templateChanged"
 									:disabled="!isNew"
 									class="form-select w-100"
-									@change="templateChanged"
 								>
 									<option value="offline">
 										{{ $t("config.vehicle.offline") }}
@@ -65,92 +66,184 @@
 									</optgroup>
 								</select>
 							</FormRow>
-							<FormRow
-								v-for="param in templateParams"
-								:id="`vehicleParam${param.Name}`"
+
+							<PropertyEntry
+								v-for="param in normalParams"
 								:key="param.Name"
-								:optional="!param.Required"
-								:label="param.Description || `[${param.Name}]`"
-								:help="param.Description === param.Help ? undefined : param.Help"
-								:small-value="['capacity'].includes(param.Name)"
-								:example="param.Example"
-							>
-								<PropertyField
-									:id="`vehicleParam${param.Name}`"
-									v-model="values[param.Name]"
-									:masked="param.Mask"
-									:property="param.Name"
-									class="me-2"
-									:required="param.Required"
-									:validValues="param.ValidValues"
-								/>
-							</FormRow>
+								:id="`vehicleParam${param.Name}`"
+								v-bind="param"
+								v-model="values[param.Name]"
+							/>
 
-							<div
-								v-if="templateName"
-								class="alert my-4"
-								:class="{
-									'alert-secondary': testUnknown || testRunning,
-									'alert-success': testSuccess,
-									'alert-danger': testFailed,
-								}"
-								role="alert"
-							>
-								<div class="d-flex justify-content-between align-items-center">
-									<div>
-										{{ $t("config.validation.label") }}:
-										<span v-if="testUnknown">{{
-											$t("config.validation.unknown")
-										}}</span>
-										<span v-if="testRunning">{{
-											$t("config.validation.running")
-										}}</span>
-										<strong v-if="testSuccess">{{
-											$t("config.validation.success")
-										}}</strong>
-										<strong v-if="testFailed">{{
-											$t("config.validation.failed")
-										}}</strong>
+							<PropertyCollapsible>
+								<template v-if="advancedParams.length" #advanced>
+									<PropertyEntry
+										v-for="param in advancedParams"
+										:key="param.Name"
+										:id="`vehicleParam${param.Name}`"
+										v-bind="param"
+										v-model="values[param.Name]"
+									/>
+								</template>
+								<template #more>
+									<h6 class="mt-3">Charging settings</h6>
+									<FormRow
+										id="vehicleParamMode"
+										label="Default mode"
+										help="Charging point mode when connecting this vehicle."
+									>
+										<PropertyField
+											id="vehicleParamMode"
+											v-model="values.mode"
+											type="String"
+											class="w-100"
+											:valid-values="[
+												{ key: 'off', name: $t('main.mode.off') },
+												{ key: 'pv', name: $t('main.mode.pv') },
+												{ key: 'minpv', name: $t('main.mode.minpv') },
+												{ key: 'now', name: $t('main.mode.now') },
+											]"
+										/>
+									</FormRow>
+									<FormRow
+										id="vehicleParamPhases"
+										label="Maximum phases"
+										help="How many phases can this vehicle charge with? Used to calculate required minimum solar surplus and plan duration."
+									>
+										<SelectGroup
+											id="vehicleParamPhases"
+											class="w-100"
+											v-model="values.phases"
+											:options="[
+												{ name: '1-phase', value: '1' },
+												{ name: '2-phases', value: '2' },
+												{ name: '3-phases', value: undefined },
+											]"
+										/>
+									</FormRow>
+									<div class="row mb-3">
+										<FormRow
+											id="vehicleParamMinCurrent"
+											label="Minimum current"
+											class="col-sm-6 mb-sm-0"
+											:help="
+												values.minCurrent && values.minCurrent < 6
+													? 'Only go below 6 A if you know what you\'re doing.'
+													: null
+											"
+										>
+											<PropertyField
+												id="vehicleParamMinCurrent"
+												v-model="values.minCurrent"
+												type="Float"
+												unit="A"
+												size="w-25 w-min-200"
+												class="me-2"
+											/>
+										</FormRow>
+
+										<FormRow
+											id="vehicleParamMaxCurrent"
+											label="Maximum current"
+											class="col-sm-6 mb-sm-0"
+											:help="
+												values.minCurrent &&
+												values.maxCurrent &&
+												values.maxCurrent < values.minCurrent
+													? 'Must be greater than minimum current.'
+													: null
+											"
+										>
+											<PropertyField
+												id="vehicleParamMaxCurrent"
+												v-model="values.maxCurrent"
+												type="Float"
+												unit="A"
+												size="w-25 w-min-200"
+												class="me-2"
+											/>
+										</FormRow>
 									</div>
-									<a href="#" class="alert-link" @click.prevent="test">
-										{{ $t("config.validation.validate") }}
-									</a>
-								</div>
-								<hr v-if="testResult" />
-								<div v-if="testResult">
-									{{ testResult }}
-								</div>
-							</div>
 
-							<div v-if="templateName" class="my-4">
+									<!-- todo: only show when multiple loadpoints exist -->
+									<FormRow
+										id="vehicleParamPriority"
+										label="Priority"
+										help="Changes the charging point priority when connecting this vehicle."
+									>
+										<PropertyField
+											id="vehicleParamPriority"
+											v-model="values.priority"
+											type="Number"
+											size="w-100"
+											class="me-2"
+											:valid-values="priorityOptions"
+											required
+										/>
+									</FormRow>
+
+									<FormRow
+										id="vehicleParamIdentifiers"
+										label="RFID identifiers"
+										help="List of RFID strings to identify the vehicle. One per line. See the current identifier on the configuration overview."
+									>
+										<PropertyField
+											id="vehicleParamIdentifiers"
+											v-model="values.identifiers"
+											type="StringList"
+											property="identifiers"
+											size="w-100"
+											class="me-2"
+										/>
+									</FormRow>
+								</template>
+							</PropertyCollapsible>
+
+							<TestResult
+								v-if="templateName"
+								:success="testSuccess"
+								:failed="testFailed"
+								:unknown="testUnknown"
+								:running="testRunning"
+								:result="testResult"
+								:error="testError"
+								@test="testManually"
+							/>
+
+							<div v-if="templateName" class="my-4 d-flex justify-content-between">
 								<button
-									type="submit"
-									class="btn btn-primary me-3"
-									:disabled="testRunning"
-									@click.prevent="isNew ? create() : update()"
+									v-if="isDeletable"
+									type="button"
+									class="btn btn-link text-danger"
+									@click.prevent="remove"
 								>
-									{{
-										testUnknown
-											? $t("config.vehicle.validateSave")
-											: $t("config.vehicle.save")
-									}}
+									{{ $t("config.vehicle.delete") }}
 								</button>
 								<button
+									v-else
 									type="button"
 									class="btn btn-link text-muted"
 									data-bs-dismiss="modal"
 								>
 									{{ $t("config.vehicle.cancel") }}
 								</button>
-							</div>
-
-							<div v-if="isDeletable" class="text-center mt-4">
 								<button
-									type="button"
-									class="btn btn-link text-danger"
-									@click.prevent="remove"
+									type="submit"
+									class="btn btn-primary"
+									:disabled="testRunning || saving"
+									@click.prevent="isNew ? create() : update()"
 								>
-									{{ $t("config.vehicle.delete") }}
+									<span
+										v-if="saving"
+										class="spinner-border spinner-border-sm"
+										role="status"
+										aria-hidden="true"
+									></span>
+									{{
+										testUnknown
+											? $t("config.vehicle.validateSave")
+											: $t("config.vehicle.save")
+									}}
 								</button>
 							</div>
 						</form>
@@ -164,22 +257,32 @@
 <script>
 import FormRow from "./FormRow.vue";
 import PropertyField from "./PropertyField.vue";
+import TestResult from "./TestResult.vue";
+import SelectGroup from "../SelectGroup.vue";
+import PropertyEntry from "./PropertyEntry.vue";
+import PropertyCollapsible from "./PropertyCollapsible.vue";
 import api from "../../api";
+import test from "./mixins/test";
 
 const initialValues = { type: "template", icon: "car" };
-
-const TEST_UNKNOWN = "unknown";
-const TEST_SUCCESS = "success";
-const TEST_FAILED = "failed";
-const TEST_RUNNING = "running";
 
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const CUSTOM_FIELDS = ["minCurrent", "maxCurrent", "priority", "identifiers", "phases", "mode"];
+
 export default {
 	name: "VehicleModal",
-	components: { FormRow, PropertyField },
+	components: {
+		FormRow,
+		PropertyField,
+		TestResult,
+		SelectGroup,
+		PropertyCollapsible,
+		PropertyEntry,
+	},
+	mixins: [test],
 	props: {
 		id: Number,
 	},
@@ -189,26 +292,13 @@ export default {
 			isModalVisible: false,
 			templates: [],
 			products: [],
+			saving: false,
 			templateName: null,
 			template: null,
 			values: { ...initialValues },
-			testResult: "",
-			testState: TEST_UNKNOWN,
 		};
 	},
 	computed: {
-		testRunning() {
-			return this.testState === TEST_RUNNING;
-		},
-		testSuccess() {
-			return this.testState === TEST_SUCCESS;
-		},
-		testFailed() {
-			return this.testState === TEST_FAILED;
-		},
-		testUnknown() {
-			return this.testState === TEST_UNKNOWN;
-		},
 		templateOptions() {
 			return {
 				online: this.products.filter((p) => !p.group && p.template !== "offline"),
@@ -217,27 +307,45 @@ export default {
 			};
 		},
 		templateParams() {
-			const params = this.template?.Params || [];
-			const filteredParams = params.filter((p) => !p.Advanced || p.Name === "icon");
-			const adjustedParams = filteredParams.map((p) => {
-				if (p.Name === "title" || p.Name === "icon") {
-					p.Required = true;
-				}
-				return p;
-			});
-			return adjustedParams;
+			return (this.template?.Params || [])
+				.filter((p) => !CUSTOM_FIELDS.includes(p.Name))
+				.map((p) => {
+					if (p.Name === "title" || p.Name === "icon") {
+						p.Required = true;
+						p.Advanced = false;
+					}
+					return p;
+				});
+		},
+		normalParams() {
+			return this.templateParams.filter((p) => !p.Advanced);
+		},
+		advancedParams() {
+			return this.templateParams.filter((p) => p.Advanced);
 		},
 		apiData() {
-			return {
+			const data = {
 				template: this.templateName,
 				...this.values,
 			};
+			// trim and remove empty lines
+			if (Array.isArray(data.identifiers)) {
+				data.identifiers = data.identifiers.map((i) => i.trim()).filter((i) => i);
+			}
+			return data;
 		},
 		isNew() {
 			return this.id === undefined;
 		},
 		isDeletable() {
 			return !this.isNew;
+		},
+		priorityOptions() {
+			const result = Array.from({ length: 11 }, (_, i) => ({ key: i, name: `${i}` }));
+			result[0].name = "0 (default)";
+			result[0].key = undefined;
+			result[10].name = "10 (highest)";
+			return result;
 		},
 	},
 	watch: {
@@ -275,10 +383,6 @@ export default {
 			this.values = { ...initialValues };
 			this.resetTest();
 		},
-		resetTest() {
-			this.testState = TEST_UNKNOWN;
-			this.testResult = null;
-		},
 		async loadConfiguration() {
 			try {
 				const vehicle = (await api.get(`config/devices/vehicle/${this.id}`)).data.result;
@@ -297,10 +401,11 @@ export default {
 			}
 		},
 		async loadTemplate() {
+			this.template = null;
 			try {
 				const opts = {
 					params: {
-						lang: this.$i18n.locale,
+						lang: this.$i18n?.locale,
 						name: this.templateName,
 					},
 				};
@@ -310,9 +415,6 @@ export default {
 				console.error(e);
 			}
 		},
-		templateChanged() {
-			this.reset();
-		},
 		applyDefaultsFromTemplate() {
 			const params = this.template?.Params || [];
 			params
@@ -321,31 +423,13 @@ export default {
 					this.values[p.Name] = p.Default;
 				});
 		},
-		async test() {
-			if (!this.$refs.form.reportValidity()) return false;
-			this.testState = TEST_RUNNING;
-			try {
-				let url = "config/test/vehicle";
-				if (!this.isNew) {
-					url += `/${this.id}`;
-				}
-				await api.post(url, this.apiData);
-				this.testState = TEST_SUCCESS;
-				this.testResult = null;
-				return true;
-			} catch (e) {
-				console.error(e);
-				this.testState = TEST_FAILED;
-				this.testResult = e.response?.data?.error || e.message;
-			}
-			return false;
-		},
 		async create() {
 			if (this.testUnknown) {
-				const success = await this.test();
+				const success = await this.test(this.testVehicle);
 				if (!success) return;
 				await sleep(250);
 			}
+			this.saving = true;
 			try {
 				await api.post("config/devices/vehicle", this.apiData);
 				this.$emit("vehicle-changed");
@@ -354,13 +438,25 @@ export default {
 				console.error(e);
 				alert("create failed");
 			}
+			this.saving = false;
+		},
+		async testManually() {
+			await this.test(this.testVehicle);
+		},
+		async testVehicle() {
+			let url = "config/test/vehicle";
+			if (!this.isNew) {
+				url += `/merge/${this.id}`;
+			}
+			return await api.post(url, this.apiData);
 		},
 		async update() {
 			if (this.testUnknown) {
-				const success = await this.test();
+				const success = await this.test(this.testVehicle);
 				if (!success) return;
 				await sleep(250);
 			}
+			this.saving = true;
 			try {
 				await api.put(`config/devices/vehicle/${this.id}`, this.apiData);
 				this.$emit("vehicle-changed");
@@ -369,6 +465,7 @@ export default {
 				console.error(e);
 				alert("update failed");
 			}
+			this.saving = false;
 		},
 		async remove() {
 			try {
@@ -385,6 +482,9 @@ export default {
 		},
 		modalInvisible() {
 			this.isModalVisible = false;
+		},
+		templateChanged() {
+			this.reset();
 		},
 	},
 };

@@ -3,16 +3,18 @@ package main
 import (
 	"bytes"
 	_ "embed"
-	"errors"
 	"fmt"
 	"go/format"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
 
+	"github.com/go-sprout/sprout"
 	combinations "github.com/mxschmitt/golang-combinations"
 	"github.com/spf13/pflag"
+	"golang.org/x/tools/imports"
 )
 
 //go:embed decorate.tpl
@@ -23,39 +25,18 @@ type dynamicType struct {
 }
 
 type typeStruct struct {
-	Type, ShortType, Signature, Function, VarName string
+	Type, ShortType, Signature, Function, VarName, ReturnTypes string
+	Params                                                     []string
 }
 
 func generate(out io.Writer, packageName, functionName, baseType string, dynamicTypes ...dynamicType) error {
 	types := make(map[string]typeStruct, len(dynamicTypes))
 	combos := make([]string, 0)
 
-	tmpl, err := template.New("gen").Funcs(template.FuncMap{
-		// dict combines key value pairs for passing structs into templates
-		"dict": func(values ...interface{}) (map[string]interface{}, error) {
-			if len(values)%2 != 0 {
-				return nil, errors.New("invalid dict call")
-			}
-			dict := make(map[string]interface{}, len(values)/2)
-			for i := 0; i < len(values); i += 2 {
-				key, ok := values[i].(string)
-				if !ok {
-					return nil, errors.New("dict keys must be strings")
-				}
-				dict[key] = values[i+1]
-			}
-			return dict, nil
-		},
+	tmpl, err := template.New("gen").Funcs(sprout.FuncMap()).Funcs(template.FuncMap{
 		// contains checks if slice contains string
-		"contains": func(combo []string, typ string) bool {
-			for _, v := range combo {
-				if v == typ {
-					return true
-				}
-			}
-			return false
-		},
-		// ordered checks if slice ordered string
+		"contains": slices.Contains[[]string, string],
+		// ordered returns a slice of typeStructs ordered by dynamicType
 		"ordered": func() []typeStruct {
 			ordered := make([]typeStruct, 0)
 			for _, k := range dynamicTypes {
@@ -65,7 +46,6 @@ func generate(out io.Writer, packageName, functionName, baseType string, dynamic
 			return ordered
 		},
 	}).Parse(srcTmpl)
-
 	if err != nil {
 		return err
 	}
@@ -73,12 +53,27 @@ func generate(out io.Writer, packageName, functionName, baseType string, dynamic
 	for _, dt := range dynamicTypes {
 		parts := strings.SplitN(dt.typ, ".", 2)
 
+		openingBrace := strings.Index(dt.signature, "(")
+		closingBrace := strings.Index(dt.signature, ")")
+		paramsStr := dt.signature[openingBrace+1 : closingBrace]
+
+		paramsStr = strings.TrimSpace(paramsStr)
+
+		var params []string
+		if len(paramsStr) > 0 {
+			params = strings.Split(paramsStr, ",")
+		}
+
+		returnValuesStr := dt.signature[closingBrace+1:]
+
 		types[dt.typ] = typeStruct{
-			Type:      dt.typ,
-			ShortType: parts[1],
-			VarName:   strings.ToLower(parts[1][:1]) + parts[1][1:],
-			Signature: dt.signature,
-			Function:  dt.function,
+			Type:        dt.typ,
+			ShortType:   parts[1],
+			VarName:     strings.ToLower(parts[1][:1]) + parts[1][1:],
+			Signature:   dt.signature,
+			Function:    dt.function,
+			Params:      params,
+			ReturnTypes: returnValuesStr,
 		}
 
 		combos = append(combos, dt.typ)
@@ -168,8 +163,9 @@ func main() {
 		target = &gofile
 	}
 
+	var name string
 	if target != nil {
-		name := *target
+		name = *target
 		if !strings.HasSuffix(name, ".go") {
 			name += ".go"
 		}
@@ -187,6 +183,12 @@ func main() {
 	formatted, err := format.Source([]byte(generated))
 	if err != nil {
 		formatted = []byte(generated)
+	}
+
+	formatted, err = imports.Process(name, formatted, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(3)
 	}
 
 	if _, err := out.Write(formatted); err != nil {

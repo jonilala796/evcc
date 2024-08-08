@@ -3,20 +3,19 @@ package modbus
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
 
-func RTUFloat64ToFloat64(b []byte) float64 {
-	bits := binary.BigEndian.Uint64(b)
-	return math.Float64frombits(bits)
-}
-
 // decodeMask converts a bit mask in decimal or hex format to uint64
 func decodeMask(mask string) (uint64, error) {
 	mask = strings.ToLower(mask)
+
+	if mask == "" {
+		return 0, errors.New("mask is required")
+	}
 
 	if strings.HasPrefix(mask, "0x") {
 		if len(mask) < 3 {
@@ -53,7 +52,7 @@ func decodeBool16(mask uint64) func(b []byte) float64 {
 	return func(b []byte) float64 {
 		u := binary.BigEndian.Uint16(b)
 		if mask > 0 {
-			u = u & uint16(mask)
+			u &= uint16(mask)
 		}
 		if u > 0 {
 			return 1

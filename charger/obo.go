@@ -39,7 +39,7 @@ func NewOboFromConfig(other map[string]interface{}) (api.Charger, error) {
 		return nil, err
 	}
 
-	return NewObo(cc.URI, cc.Device, cc.Comset, cc.Baudrate, modbus.ProtocolFromRTU(cc.RTU), cc.ID)
+	return NewObo(cc.URI, cc.Device, cc.Comset, cc.Baudrate, cc.Protocol(), cc.ID)
 }
 
 // NewObo creates OBO Bettermann charger
@@ -70,7 +70,7 @@ func NewObo(uri, device, comset string, baudrate int, proto modbus.Protocol, sla
 	// go func() {
 	// 	conn.WriteSingleRegister(3, 1)
 	// 	for {
-	// 		for i := 0; i < 3; i++ {
+	// 		for i := range res {
 	// 			u := rand.Int31n(256)
 	// 			conn.WriteSingleRegister(uint16(i), uint16(u))
 	// 		}

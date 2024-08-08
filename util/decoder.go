@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 )
 
 var validate = validator.New()
@@ -41,6 +41,10 @@ func DecodeOther(other, cc interface{}) error {
 // ConfigError wraps yaml configuration errors from mapstructure
 type ConfigError struct {
 	err error
+}
+
+func NewConfigError(err error) error {
+	return &ConfigError{err}
 }
 
 func (e *ConfigError) Error() string {

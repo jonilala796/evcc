@@ -19,16 +19,9 @@ params:
   - preset: vehicle-identify
 render: |
   type: custom
-  {{- if .title }}
-  title: {{ .title }}
-  {{- end }}
-  capacity: {{ .capacity }}
-  {{- if .phases }}
-  phases: {{ .phases }}
-  {{- end }}
+  {{ include "vehicle-common" . }}
   soc:
     source: http
     uri: https://app.evnotify.de/soc?akey={{ urlEncode .akey }}&token={{ urlEncode .token }} # evNotify Server + AKEY
-    method: GET
     jq: .soc_display
   {{ include "vehicle-identify" . }}

@@ -16,17 +16,6 @@ import (
 	influxlog "github.com/influxdata/influxdb-client-go/v2/log"
 )
 
-// InfluxConfig is the influx db configuration
-type InfluxConfig struct {
-	URL      string
-	Database string
-	Token    string
-	Org      string
-	User     string
-	Password string
-	Interval time.Duration
-}
-
 // Influx is a influx publisher
 type Influx struct {
 	sync.Mutex
@@ -77,6 +66,9 @@ func (m *Influx) writeComplexPoint(writer pointWriter, param util.Param, tags ma
 	fields := make(map[string]any)
 
 	switch val := param.Val.(type) {
+	case string:
+		return
+
 	case int, int64, float64:
 		fields["value"] = param.Val
 

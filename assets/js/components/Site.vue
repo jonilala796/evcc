@@ -1,27 +1,36 @@
 <template>
-	<div class="d-flex flex-column site">
+	<div class="d-flex flex-column site safe-area-inset">
 		<div class="container px-4 top-area">
-			<div class="d-flex justify-content-between align-items-center my-3">
+			<div class="d-flex justify-content-between align-items-center my-3 my-md-4">
 				<h1 class="d-block my-0">
 					{{ siteTitle || "evcc" }}
 				</h1>
 				<div class="d-flex">
-					<Notifications :notifications="notifications" class="me-2" />
+					<Notifications
+						:notifications="notifications"
+						:loadpointTitles="loadpointTitles"
+						class="me-2"
+					/>
 					<TopNavigation v-bind="topNavigation" />
 				</div>
 			</div>
 			<Energyflow v-bind="energyflow" />
 		</div>
 		<div class="d-flex flex-column justify-content-between content-area">
+			<div v-if="fatal" class="flex-grow-1 align-items-center d-flex justify-content-center">
+				<h1 class="mb-5 text-gray fs-4">{{ $t("startupError.title") }}</h1>
+			</div>
 			<Loadpoints
+				v-else
 				class="mt-1 mt-sm-2 flex-grow-1"
 				:loadpoints="loadpoints"
-				:vehicles="vehicles"
-				:smartCostLimit="smartCostLimit"
+				:vehicles="vehicleList"
 				:smartCostType="smartCostType"
 				:tariffGrid="tariffGrid"
 				:tariffCo2="tariffCo2"
 				:currency="currency"
+				:gridConfigured="gridConfigured"
+				:pvConfigured="pvConfigured"
 			/>
 			<Footer v-bind="footer"></Footer>
 		</div>
@@ -58,30 +67,26 @@ export default {
 		gridConfigured: Boolean,
 		gridPower: Number,
 		homePower: Number,
-		pvConfigured: Boolean,
 		pvPower: Number,
 		pv: Array,
-		batteryConfigured: Boolean,
 		batteryPower: Number,
 		batterySoc: Number,
+		batteryDischargeControl: Boolean,
+		batteryGridChargeLimit: Number,
+		batteryGridChargeActive: Boolean,
+		batteryMode: String,
 		battery: Array,
 		gridCurrents: Array,
 		prioritySoc: Number,
 		bufferSoc: Number,
 		bufferStartSoc: Number,
 		siteTitle: String,
-		vehicles: Array,
+		vehicles: Object,
 
 		auth: Object,
 
 		currency: String,
-		savingsAmount: Number,
-		savingsEffectivePrice: Number,
-		savingsGridCharged: Number,
-		savingsSelfConsumptionCharged: Number,
-		savingsSelfConsumptionPercent: Number,
-		savingsSince: String,
-		savingsTotalCharged: Number,
+		statistics: Object,
 		tariffFeedIn: Number,
 		tariffGrid: Number,
 		tariffCo2: Number,
@@ -95,22 +100,35 @@ export default {
 		hasUpdater: Boolean,
 		uploadMessage: String,
 		uploadProgress: Number,
-		sponsor: String,
-		sponsorTokenExpires: Number,
-		smartCostLimit: Number,
+		sponsor: { type: Object, default: () => ({}) },
 		smartCostType: String,
+		fatal: Object,
 	},
 	computed: {
+		batteryConfigured: function () {
+			return this.battery?.length > 0;
+		},
+		pvConfigured: function () {
+			return this.pv?.length > 0;
+		},
 		energyflow: function () {
 			return this.collectProps(Energyflow);
 		},
+		loadpointTitles: function () {
+			return this.loadpoints.map((lp) => lp.title);
+		},
 		loadpointsCompact: function () {
 			return this.loadpoints.map((lp) => {
-				const icon = lp.chargerIcon || lp.vehicleIcon || "car";
+				const vehicleIcon = this.vehicles?.[lp.vehicleName]?.icon;
+				const icon = lp.chargerIcon || vehicleIcon || "car";
 				const charging = lp.charging;
 				const power = lp.chargePower || 0;
 				return { icon, charging, power };
 			});
+		},
+		vehicleList: function () {
+			const vehicles = this.vehicles || {};
+			return Object.entries(vehicles).map(([name, vehicle]) => ({ name, ...vehicle }));
 		},
 		topNavigation: function () {
 			const vehicleLogins = this.auth ? this.auth.vehicles : {};
@@ -131,17 +149,11 @@ export default {
 					uploadMessage: this.uploadMessage,
 					uploadProgress: this.uploadProgress,
 				},
-				sponsor: this.sponsor,
 				savings: {
-					since: this.savingsSince,
-					totalCharged: this.savingsTotalCharged,
-					gridCharged: this.savingsGridCharged,
-					selfConsumptionCharged: this.savingsSelfConsumptionCharged,
-					amount: this.savingsAmount,
-					effectivePrice: this.savingsEffectivePrice,
-					selfConsumptionPercent: this.savingsSelfConsumptionPercent,
-					gridPrice: this.tariffGrid,
-					feedInPrice: this.tariffFeedIn,
+					sponsor: this.sponsor,
+					statistics: this.statistics,
+					co2Configured: this.tariffCo2 !== undefined,
+					priceConfigured: this.tariffGrid !== undefined,
 					currency: this.currency,
 				},
 			};
@@ -152,9 +164,12 @@ export default {
 <style scoped>
 .site {
 	min-height: 100vh;
+	min-height: 100dvh;
 }
 .content-area {
 	flex-grow: 1;
 	z-index: 1;
+}
+.fatal {
 }
 </style>

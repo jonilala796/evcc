@@ -2,87 +2,12 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
-//go:generate mockgen -package mock -destination ../mock/mock_api.go github.com/evcc-io/evcc/api Charger,ChargeState,PhaseSwitcher,Identifier,Meter,MeterEnergy,Vehicle,ChargeRater,Battery,Tariff
-
-// ChargeMode is the charge operation mode. Valid values are off, now, minpv and pv
-type ChargeMode string
-
-// Charge modes
-const (
-	ModeEmpty ChargeMode = ""
-	ModeOff   ChargeMode = "off"
-	ModeNow   ChargeMode = "now"
-	ModeMinPV ChargeMode = "minpv"
-	ModePV    ChargeMode = "pv"
-)
-
-// String implements Stringer
-func (c ChargeMode) String() string {
-	return string(c)
-}
-
-// ChargeStatus is the EV's charging status from A to F
-type ChargeStatus string
-
-// Charging states
-const (
-	StatusNone ChargeStatus = ""
-	StatusA    ChargeStatus = "A" // Fzg. angeschlossen: nein    Laden aktiv: nein    Ladestation betriebsbereit, Fahrzeug getrennt
-	StatusB    ChargeStatus = "B" // Fzg. angeschlossen:   ja    Laden aktiv: nein    Fahrzeug verbunden, Netzspannung liegt nicht an
-	StatusC    ChargeStatus = "C" // Fzg. angeschlossen:   ja    Laden aktiv:   ja    Fahrzeug lädt, Netzspannung liegt an
-	StatusD    ChargeStatus = "D" // Fzg. angeschlossen:   ja    Laden aktiv:   ja    Fahrzeug lädt mit externer Belüfungsanforderung (für Blei-Säure-Batterien)
-	StatusE    ChargeStatus = "E" // Fzg. angeschlossen:   ja    Laden aktiv: nein    Fehler Fahrzeug / Kabel (CP-Kurzschluss, 0V)
-	StatusF    ChargeStatus = "F" // Fzg. angeschlossen:   ja    Laden aktiv: nein    Fehler EVSE oder Abstecken simulieren (CP-Wake-up, -12V)
-)
-
-var StatusEasA = map[ChargeStatus]ChargeStatus{StatusE: StatusA}
-
-// ChargeStatusString converts a string to ChargeStatus
-func ChargeStatusString(status string) (ChargeStatus, error) {
-	s := strings.ToUpper(strings.Trim(status, "\x00 "))
-
-	if len(s) == 0 {
-		return StatusNone, fmt.Errorf("invalid status: %s", status)
-	}
-
-	switch s1 := s[:1]; s1 {
-	case "A", "B":
-		return ChargeStatus(s1), nil
-
-	case "C", "D":
-		if s == "C1" || s == "D1" {
-			return StatusB, nil
-		}
-		return StatusC, nil
-
-	case "E", "F":
-		return ChargeStatus(s1), fmt.Errorf("invalid status: %s", s)
-
-	default:
-		return StatusNone, fmt.Errorf("invalid status: %s", status)
-	}
-}
-
-// ChargeStatusStringWithMapping converts a string to ChargeStatus. In case of error, mapping is applied.
-func ChargeStatusStringWithMapping(s string, m map[ChargeStatus]ChargeStatus) (ChargeStatus, error) {
-	status, err := ChargeStatusString(s)
-	if mappedStatus, ok := m[status]; ok && err != nil {
-		return mappedStatus, nil
-	}
-	return status, err
-}
-
-// String implements Stringer
-func (c ChargeStatus) String() string {
-	return string(c)
-}
+//go:generate mockgen -package api -destination mock.go github.com/evcc-io/evcc/api Charger,ChargeState,CurrentLimiter,CurrentGetter,PhaseSwitcher,PhaseGetter,Identifier,Meter,MeterEnergy,PhaseCurrents,Vehicle,ChargeRater,Battery,Tariff,BatteryController,Circuit
 
 // Meter provides total active power in W
 type Meter interface {
@@ -124,8 +49,8 @@ type ChargeState interface {
 	Status() (ChargeStatus, error)
 }
 
-// CurrentLimiter provides settings charging maximum charging current
-type CurrentLimiter interface {
+// CurrentController provides settings charging maximum charging current
+type CurrentController interface {
 	MaxCurrent(current int64) error
 }
 
@@ -134,12 +59,17 @@ type CurrentGetter interface {
 	GetMaxCurrent() (float64, error)
 }
 
+// BatteryController optionally allows to control home battery (dis)charging behaviour
+type BatteryController interface {
+	SetBatteryMode(BatteryMode) error
+}
+
 // Charger provides current charging status and enable/disable charging
 type Charger interface {
 	ChargeState
 	Enabled() (bool, error)
 	Enable(enable bool) error
-	CurrentLimiter
+	CurrentController
 }
 
 // ChargerEx provides milli-amp precision charger current control
@@ -152,6 +82,10 @@ type PhaseSwitcher interface {
 	Phases1p3p(phases int) error
 }
 
+type PhaseGetter interface {
+	GetPhases() (int, error)
+}
+
 // Diagnosis is a helper interface that allows to dump diagnostic data to console
 type Diagnosis interface {
 	Diagnose()
@@ -159,7 +93,7 @@ type Diagnosis interface {
 
 // ChargeTimer provides current charge cycle duration
 type ChargeTimer interface {
-	ChargingTime() (time.Duration, error)
+	ChargeDuration() (time.Duration, error)
 }
 
 // ChargeRater provides charged energy amount in kWh
@@ -177,14 +111,20 @@ type Authorizer interface {
 	Authorize(key string) error
 }
 
+// PhaseDescriber returns the number of availablephases
+type PhaseDescriber interface {
+	Phases() int
+}
+
 // Vehicle represents the EV and it's battery
 type Vehicle interface {
 	Battery
 	BatteryCapacity
 	IconDescriber
+	FeatureDescriber
+	PhaseDescriber
 	Title() string
 	SetTitle(string)
-	Phases() int
 	Identifiers() []string
 	OnIdentified() ActionConfig
 }
@@ -215,15 +155,19 @@ type VehiclePosition interface {
 	Position() (float64, float64, error)
 }
 
-// SocLimiter returns the vehicles charge limit
-type SocLimiter interface {
-	TargetSoc() (float64, error)
+// CurrentLimiter returns the current limits
+type CurrentLimiter interface {
+	GetMinMaxCurrent() (float64, float64, error)
 }
 
-// VehicleChargeController allows to start/stop the charging session on the vehicle side
-type VehicleChargeController interface {
-	StartCharge() error
-	StopCharge() error
+// SocLimiter returns the soc limit
+type SocLimiter interface {
+	GetLimitSoc() (int64, error)
+}
+
+// ChargeController allows to start/stop the charging session on the vehicle side
+type ChargeController interface {
+	ChargeEnable(bool) error
 }
 
 // Resurrector provides wakeup calls to the vehicle with an API call or a CP interrupt from the charger
@@ -257,4 +201,34 @@ type FeatureDescriber interface {
 // CsvWriter converts to csv
 type CsvWriter interface {
 	WriteCsv(context.Context, io.Writer) error
+}
+
+// CircuitMeasurements is the measurements a circuit or load must deliver
+type CircuitMeasurements interface {
+	GetChargePower() float64
+	GetMaxPhaseCurrent() float64
+}
+
+// CircuitLoad represents a loadpoint attached to a circuit
+type CircuitLoad interface {
+	CircuitMeasurements
+	GetCircuit() Circuit
+}
+
+// Circuit defines the load control domain
+type Circuit interface {
+	CircuitMeasurements
+	GetTitle() string
+	SetTitle(string)
+	GetParent() Circuit
+	RegisterChild(child Circuit)
+	Wrap(parent Circuit) error
+	HasMeter() bool
+	GetMaxPower() float64
+	GetMaxCurrent() float64
+	SetMaxPower(float64)
+	SetMaxCurrent(float64)
+	Update([]CircuitLoad) error
+	ValidateCurrent(old, new float64) float64
+	ValidatePower(old, new float64) float64
 }

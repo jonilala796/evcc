@@ -164,7 +164,7 @@ func (wb *Versicharge) TotalEnergy() (float64, error) {
 		return 0, err
 	}
 
-	return float64(binary.BigEndian.Uint32(b)) / 1e4, err
+	return float64(binary.BigEndian.Uint32(b)) / 1e3, err
 }
 
 // getPhaseValues returns 3 sequential register values
@@ -175,7 +175,7 @@ func (wb *Versicharge) getPhaseValues(reg uint16) (float64, float64, float64, er
 	}
 
 	var res [3]float64
-	for i := 0; i < 3; i++ {
+	for i := range res {
 		res[i] = float64(binary.BigEndian.Uint16(b[2*i:]))
 	}
 

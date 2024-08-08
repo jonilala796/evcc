@@ -128,6 +128,8 @@ func (wb *WebastoNext) Status() (api.ChargeStatus, error) {
 		return api.StatusB, nil
 	case 3:
 		return api.StatusC, nil
+	case 7:
+		return api.StatusNone, fmt.Errorf("charging error: status %d", sb)
 	default:
 		return api.StatusNone, fmt.Errorf("invalid status: %d", sb)
 	}
@@ -150,7 +152,7 @@ func (wb *WebastoNext) Enable(enable bool) error {
 
 // Enabled implements the api.Charger interface
 func (wb *WebastoNext) Enabled() (bool, error) {
-	return wb.enabled, nil
+	return verifyEnabled(wb, wb.enabled)
 
 	// b, err := wb.conn.ReadHoldingRegisters(1104, 1)
 	// if err != nil {
@@ -179,8 +181,8 @@ func (wb *WebastoNext) MaxCurrent(current int64) error {
 
 var _ api.ChargeTimer = (*WebastoNext)(nil)
 
-// ChargingTime implements the api.ChargeTimer interface
-func (wb *WebastoNext) ChargingTime() (time.Duration, error) {
+// ChargeDuration implements the api.ChargeTimer interface
+func (wb *WebastoNext) ChargeDuration() (time.Duration, error) {
 	b, err := wb.conn.ReadHoldingRegisters(tqRegChargingTime, 2)
 	if err != nil {
 		return 0, err
@@ -217,17 +219,17 @@ var _ api.PhaseCurrents = (*WebastoNext)(nil)
 
 // Currents implements the api.PhaseCurrents interface
 func (wb *WebastoNext) Currents() (float64, float64, float64, error) {
-	var curr [3]float64
+	var res [3]float64
 	for l := uint16(0); l < 3; l++ {
 		b, err := wb.conn.ReadInputRegisters(tqRegCurrents+2*l, 1)
 		if err != nil {
 			return 0, 0, 0, err
 		}
 
-		curr[l] = float64(binary.BigEndian.Uint16(b)) / 1e3
+		res[l] = float64(binary.BigEndian.Uint16(b)) / 1e3
 	}
 
-	return curr[0], curr[1], curr[2], nil
+	return res[0], res[1], res[2], nil
 }
 
 var _ api.Identifier = (*WebastoNext)(nil)

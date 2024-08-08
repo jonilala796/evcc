@@ -16,10 +16,7 @@ import (
 
 // Twc3 is an api.Vehicle implementation for Twc3 cars
 type Twc3 struct {
-	*request.Helper
-	log     *util.Logger
 	lp      loadpoint.API
-	uri     string
 	vitalsG func() (Vitals, error)
 	enabled bool
 }
@@ -55,7 +52,7 @@ type Vitals struct {
 	SessionEnergyWh   float64 `json:"session_energy_wh"`   // 22864.699
 	ConfigStatus      int     `json:"config_status"`       // 5
 	EvseState         int     `json:"evse_state"`          // 1
-	CurrentAlerts     []any   `json:"current_alerts"`      //[]
+	CurrentAlerts     []any   `json:"current_alerts"`      // []
 }
 
 // NewTwc3FromConfig creates a new vehicle
@@ -71,71 +68,18 @@ func NewTwc3FromConfig(other map[string]interface{}) (api.Charger, error) {
 		return nil, err
 	}
 
-	log := util.NewLogger("twc3")
+	c := &Twc3{}
 
-	c := &Twc3{
-		Helper: request.NewHelper(log),
-		uri:    util.DefaultScheme(strings.TrimSuffix(cc.URI, "/"), "http"),
-		log:    log,
-	}
+	client := request.NewHelper(util.NewLogger("twc3"))
+	uri := fmt.Sprintf("%s/api/1/vitals", util.DefaultScheme(strings.TrimSuffix(cc.URI, "/"), "http"))
 
 	c.vitalsG = provider.Cached(func() (Vitals, error) {
 		var res Vitals
-		uri := fmt.Sprintf("%s/api/1/vitals", c.uri)
-		err := c.GetJSON(uri, &res)
+		err := client.GetJSON(uri, &res)
 		return res, err
-	}, time.Second)
+	}, cc.Cache)
 
 	return c, nil
-}
-
-// Enabled implements the api.Charger interface
-func (c *Twc3) Enabled() (bool, error) {
-	enabled, err := verifyEnabled(c, c.enabled)
-	if err == nil {
-		c.enabled = enabled
-	}
-
-	return enabled, err
-}
-
-// Enable implements the api.Charger interface
-func (c *Twc3) Enable(enable bool) error {
-	if c.lp == nil {
-		return errors.New("loadpoint not initialized")
-	}
-
-	v, ok := c.lp.GetVehicle().(api.VehicleChargeController)
-	if !ok {
-		return errors.New("vehicle not capable of start/stop")
-	}
-
-	var err error
-	if enable {
-		err = v.StartCharge()
-	} else {
-		err = v.StopCharge()
-	}
-
-	if err == nil {
-		c.enabled = enable
-	}
-
-	return err
-}
-
-// MaxCurrent implements the api.Charger interface
-func (c *Twc3) MaxCurrent(current int64) error {
-	if c.lp == nil {
-		return errors.New("loadpoint not initialized")
-	}
-
-	v, ok := c.lp.GetVehicle().(api.CurrentLimiter)
-	if !ok {
-		return errors.New("vehicle not capable of current control")
-	}
-
-	return v.MaxCurrent(current)
 }
 
 // Status implements the api.Charger interface
@@ -153,6 +97,67 @@ func (v *Twc3) Status() (api.ChargeStatus, error) {
 	return status, err
 }
 
+// Enabled implements the api.Charger interface
+func (c *Twc3) Enabled() (bool, error) {
+	return verifyEnabled(c, c.enabled)
+}
+
+// Enable implements the api.Charger interface
+func (c *Twc3) Enable(enable bool) error {
+	if c.lp == nil {
+		return errors.New("loadpoint not initialized")
+	}
+
+	// ignore disabling when vehicle is already disconnected
+	// https://github.com/evcc-io/evcc/issues/10213
+	status, err := c.Status()
+	if err != nil {
+		return err
+	}
+	if status == api.StatusA && !enable {
+		c.enabled = false
+		return nil
+	}
+
+	v, ok := c.lp.GetVehicle().(api.ChargeController)
+	if !ok {
+		return errors.New("vehicle not capable of start/stop")
+	}
+
+	err = v.ChargeEnable(enable)
+	if err == nil {
+		c.enabled = enable
+	}
+
+	return err
+}
+
+// MaxCurrent implements the api.Charger interface
+func (c *Twc3) MaxCurrent(current int64) error {
+	if c.lp == nil {
+		return errors.New("loadpoint not initialized")
+	}
+
+	v, ok := c.lp.GetVehicle().(api.CurrentController)
+	if !ok {
+		return errors.New("vehicle not capable of current control")
+	}
+
+	return v.MaxCurrent(current)
+}
+
+var _ api.CurrentGetter = (*Twc3)(nil)
+
+// GetMaxCurrent implements the api.CurrentGetter interface
+func (c *Twc3) GetMaxCurrent() (float64, error) {
+	v, ok := c.lp.GetVehicle().(api.CurrentGetter)
+	if !ok {
+		return 0, api.ErrNotAvailable
+	}
+
+	return v.GetMaxCurrent()
+}
+
 var _ api.ChargeRater = (*Twc3)(nil)
 
 // ChargedEnergy implements the api.ChargeRater interface
@@ -161,13 +166,8 @@ func (v *Twc3) ChargedEnergy() (float64, error) {
 	return res.SessionEnergyWh / 1e3, err
 }
 
-var _ api.ChargeTimer = (*Twc3)(nil)
-
-// ChargingTime implements the api.ChargeTimer interface
-func (v *Twc3) ChargingTime() (time.Duration, error) {
-	res, err := v.vitalsG()
-	return time.Duration(res.SessionS) * time.Second, err
-}
+// removed: https://github.com/evcc-io/evcc/issues/13555
+// var _ api.ChargeTimer = (*Twc3)(nil)
 
 // Use workaround if voltageC_v is approximately half of grid_v
 //

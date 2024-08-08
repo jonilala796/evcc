@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -20,10 +21,17 @@ func (r Rate) IsEmpty() bool {
 // Rates is a slice of (future) tariff rates
 type Rates []Rate
 
+// Sort rates by start time
+func (r Rates) Sort() {
+	slices.SortStableFunc(r, func(i, j Rate) int {
+		return i.Start.Compare(j.Start)
+	})
+}
+
 // Current returns the rates current rate or error
 func (r Rates) Current(now time.Time) (Rate, error) {
 	for _, rr := range r {
-		if (rr.Start.Before(now) || rr.Start.Equal(now)) && rr.End.After(now) {
+		if !rr.Start.After(now) && rr.End.After(now) {
 			return rr, nil
 		}
 	}

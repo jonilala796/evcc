@@ -36,12 +36,10 @@ func NewWattpilotFromConfig(other map[string]interface{}) (api.Charger, error) {
 	}
 
 	return NewWattpilot(cc.URI, cc.Password, cc.Cache)
-
 }
 
 // NewWattpilot creates Wattpilot charger
 func NewWattpilot(uri, password string, cache time.Duration) (api.Charger, error) {
-
 	c := &Wattpilot{
 		api: wattpilot.New(uri, password),
 	}
@@ -87,7 +85,6 @@ func (c *Wattpilot) Enable(enable bool) error {
 	if !enable {
 		forceState = 1 // off
 	}
-
 	return c.api.SetProperty("frc", forceState)
 }
 
@@ -103,16 +100,8 @@ func (c *Wattpilot) CurrentPower() (float64, error) {
 	return c.api.GetPower()
 }
 
-var _ api.ChargeRater = (*Wattpilot)(nil)
-
-// ChargedEnergy implements the api.ChargeRater interface
-func (c *Wattpilot) ChargedEnergy() (float64, error) {
-	resp, err := c.api.GetProperty("wh")
-	if err != nil {
-		return 0, err
-	}
-	return resp.(float64) / 1e3, err
-}
+// removed: https://github.com/evcc-io/evcc/issues/13726
+// var _ api.ChargeRater = (*Wattpilot)(nil)
 
 var _ api.PhaseCurrents = (*Wattpilot)(nil)
 

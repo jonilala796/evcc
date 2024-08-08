@@ -13,8 +13,10 @@ var acceptable = []string{
 	"missing token",
 	"mqtt not configured",
 	"not a SunSpec device",
-	"missing credentials", // sockets
-	"missing password",    // Powerwall
+	"connect: connection refused", // sockets
+	"missing credentials",         // sockets
+	"power: timeout",              // sockets
+	"missing password",            // Powerwall
 	"connect: no route to host",
 	"connect: connection refused",
 	"connect: network is unreachable",
@@ -26,10 +28,13 @@ var acceptable = []string{
 	"context deadline exceeded",                        // LG ESS
 	"no ping response for 192.0.2.2",                   // SMA
 	"no such network interface",                        // SMA
+	"missing config values: username, password, key",   // E3DC
 }
 
 func TestTemplates(t *testing.T) {
 	templates.TestClass(t, templates.Meter, func(t *testing.T, values map[string]any) {
+		t.Helper()
+
 		if _, err := NewFromConfig("template", values); err != nil && !test.Acceptable(err, acceptable) {
 			t.Log(values)
 			t.Error(err)

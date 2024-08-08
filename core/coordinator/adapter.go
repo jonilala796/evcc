@@ -1,8 +1,6 @@
 package coordinator
 
 import (
-	"slices"
-
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/loadpoint"
 )
@@ -21,12 +19,12 @@ func NewAdapter(lp loadpoint.API, c *Coordinator) API {
 	}
 }
 
-func (a *adapter) GetVehicles() []api.Vehicle {
-	return a.c.GetVehicles()
+func (a *adapter) GetVehicles(availableOnly bool) []api.Vehicle {
+	return a.c.GetVehicles(availableOnly)
 }
 
-func (a *adapter) GetVehicleIndex(v api.Vehicle) int {
-	return slices.Index(a.c.vehicles, v)
+func (a *adapter) Owner(v api.Vehicle) loadpoint.API {
+	return a.c.Owner(v)
 }
 
 func (a *adapter) Acquire(v api.Vehicle) {

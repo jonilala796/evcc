@@ -37,8 +37,9 @@
 										<VehicleOptions
 											:id="session.vehicle"
 											class="options"
-											:vehicles="vehicles"
-											:is-unknown="false"
+											:vehicles="vehicleOptions"
+											connected
+											:selected="session.vehicle"
 											@change-vehicle="changeVehicle"
 											@remove-vehicle="removeVehicle"
 										>
@@ -79,9 +80,8 @@
 										{{ $t("sessions.solar") }}
 									</th>
 									<td>
-										{{ fmtNumber(session.solarPercentage, 1) }}% ({{
-											fmtKWh(solarEnergy, solarEnergy >= 1e3)
-										}})
+										{{ fmtPercentage(session.solarPercentage, 1) }}
+										({{ fmtKWh(solarEnergy, solarEnergy >= 1e3) }})
 									</td>
 								</tr>
 								<tr v-if="session.price != null">
@@ -189,7 +189,7 @@ export default {
 	props: {
 		session: Object,
 		currency: String,
-		vehicles: [Object],
+		vehicles: Array,
 	},
 	emits: ["session-changed"],
 	computed: {
@@ -202,6 +202,12 @@ export default {
 		},
 		solarEnergy: function () {
 			return this.chargedEnergy * (this.session.solarPercentage / 100);
+		},
+		vehicleOptions: function () {
+			return this.vehicles.map((v) => ({
+				name: v.title,
+				title: v.title,
+			}));
 		},
 	},
 	methods: {
@@ -218,15 +224,11 @@ export default {
 		formatKm: function (value) {
 			return `${this.fmtNumber(distanceValue(value), 0)} ${distanceUnit()}`;
 		},
-		async changeVehicle(index) {
-			await this.updateSession({
-				vehicle: this.vehicles[index - 1].title,
-			});
+		async changeVehicle(title) {
+			await this.updateSession({ vehicle: title });
 		},
 		async removeVehicle() {
-			await this.updateSession({
-				vehicle: null,
-			});
+			await this.updateSession({ vehicle: null });
 		},
 		async updateSession(data) {
 			try {

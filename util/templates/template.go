@@ -5,11 +5,12 @@ import (
 	_ "embed"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
 	"github.com/evcc-io/evcc/util"
+	"github.com/go-sprout/sprout"
 )
 
 // Template describes is a proxy device for use with cli and automated testing
@@ -55,7 +56,7 @@ func (t *Template) Validate() error {
 		switch p.Name {
 		case ParamUsage:
 			for _, c := range p.Choice {
-				if !slices.Contains(ValidUsageChoices, c) {
+				if !slices.Contains(UsageStrings(), c) {
 					return fmt.Errorf("invalid usage choice '%s' in template %s", c, t.Template)
 				}
 			}
@@ -155,7 +156,7 @@ func (t *Template) GroupTitle(lang string) string {
 }
 
 // Defaults returns a map of default values for the template
-func (t *Template) Defaults(renderMode string) map[string]interface{} {
+func (t *Template) Defaults(renderMode int) map[string]interface{} {
 	values := make(map[string]interface{})
 	for _, p := range t.Params {
 		values[p.Name] = p.DefaultValue(renderMode)
@@ -207,7 +208,7 @@ var proxyTmpl string
 
 // RenderProxyWithValues renders the proxy template
 func (t *Template) RenderProxyWithValues(values map[string]interface{}, lang string) ([]byte, error) {
-	tmpl, err := template.New("yaml").Funcs(sprig.TxtFuncMap()).Parse(proxyTmpl)
+	tmpl, err := template.New("yaml").Funcs(sprout.FuncMap()).Parse(proxyTmpl)
 	if err != nil {
 		panic(err)
 	}
@@ -215,23 +216,22 @@ func (t *Template) RenderProxyWithValues(values map[string]interface{}, lang str
 	t.ModbusParams("", values)
 
 	for index, p := range t.Params {
-		for k, v := range values {
-			if p.Name != k {
-				continue
-			}
+		v, ok := values[p.Name]
+		if !ok {
+			continue
+		}
 
-			switch p.Type {
-			case TypeStringList:
-				for _, e := range v.([]string) {
-					t.Params[index].Values = append(p.Values, yamlQuote(e))
-				}
-			default:
-				switch v := v.(type) {
-				case string:
-					t.Params[index].Value = yamlQuote(v)
-				case int:
-					t.Params[index].Value = fmt.Sprintf("%d", v)
-				}
+		switch p.Type {
+		case TypeStringList:
+			for _, e := range v.([]string) {
+				t.Params[index].Values = append(p.Values, yamlQuote(e))
+			}
+		default:
+			switch v := v.(type) {
+			case string:
+				t.Params[index].Value = yamlQuote(v)
+			case int:
+				t.Params[index].Value = strconv.Itoa(v)
 			}
 		}
 	}
@@ -267,7 +267,7 @@ func (t *Template) RenderProxyWithValues(values map[string]interface{}, lang str
 }
 
 // RenderResult renders the result template to instantiate the proxy
-func (t *Template) RenderResult(renderMode string, other map[string]interface{}) ([]byte, map[string]interface{}, error) {
+func (t *Template) RenderResult(renderMode int, other map[string]interface{}) ([]byte, map[string]interface{}, error) {
 	values := t.Defaults(renderMode)
 	if err := util.DecodeOther(other, &values); err != nil {
 		return nil, values, err
@@ -301,6 +301,8 @@ func (t *Template) RenderResult(renderMode string, other map[string]interface{})
 		} else {
 			out = p.Name
 		}
+
+		// TODO move yamlQuote to explicit quoting in templates, see https://github.com/evcc-io/evcc/issues/10742
 
 		switch typed := val.(type) {
 		case []interface{}:

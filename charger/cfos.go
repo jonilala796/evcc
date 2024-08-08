@@ -11,12 +11,19 @@ import (
 )
 
 const (
-	cfosRegRelaySelect  = 8087 // Holding
-	cfosRegStatus       = 8092 // Holding
-	cfosRegMaxCurrent   = 8093 // Holding
-	cfosRegEnable       = 8094 // Holding
-	cfosRegLastRfid     = 8096 // Holding
-	cfosRegSolarEnabled = 8113 // Holding
+	cfosRegDisconnectCp = 8086
+	cfosRegRelaySelect  = 8087
+	cfosRegStatus       = 8092
+	cfosRegMaxCurrent   = 8093
+	cfosRegEnable       = 8094
+	cfosRegLastRfid     = 8096
+	cfosRegMeter        = 8112
+	cfosRegSolarEnabled = 8113
+
+	cfosRegMeterFlags = 8057
+	cfosRegEnergy     = 8058 //	4 rw Aktiver Import [Wh]
+	cfosRegPower      = 8062 //	2 r	Aktive Leistung [W]
+	cfosRegCurrents   = 8064 //	2 r	Momentaner Strom L1 [0.1 A]
 )
 
 // CfosPowerBrain is an charger implementation for cFos PowerBrain wallboxes.
@@ -30,7 +37,7 @@ func init() {
 	registry.Add("cfos", NewCfosPowerBrainFromConfig)
 }
 
-// go:generate go run ../cmd/tools/decorate.go -f decorateCfos -b "*CfosPowerBrain" -r api.Charger -t "api.PhaseSwitcher,Phases1p3p,func(int) error"
+//go:generate go run ../cmd/tools/decorate.go -f decorateCfos -b *CfosPowerBrain -r api.Charger -t "api.Meter,CurrentPower,func() (float64, error)" -t "api.MeterEnergy,TotalEnergy,func() (float64, error)" -t "api.PhaseCurrents,Currents,func() (float64, float64, float64, error)" -t "api.PhaseSwitcher,Phases1p3p,func(int) error"
 
 // NewCfosPowerBrainFromConfig creates a cFos charger from generic config
 func NewCfosPowerBrainFromConfig(other map[string]interface{}) (api.Charger, error) {
@@ -69,15 +76,28 @@ func NewCfosPowerBrain(uri string, id uint8) (api.Charger, error) {
 		conn: conn,
 	}
 
+	// decorate meter
+	var (
+		power    func() (float64, error)
+		energy   func() (float64, error)
+		currents func() (float64, float64, float64, error)
+	)
+	if b, err := wb.conn.ReadHoldingRegisters(cfosRegMeter, 1); err == nil && binary.BigEndian.Uint16(b) != 0 {
+		power = wb.currentPower
+		energy = wb.totalEnergy
+
+		if b, err := wb.conn.ReadHoldingRegisters(cfosRegMeterFlags, 1); err == nil && binary.BigEndian.Uint16(b) != 0 {
+			currents = wb.currents
+		}
+	}
+
 	// decorate phases
 	var phases1p3p func(int) error
-
-	b, err := wb.conn.ReadHoldingRegisters(cfosRegSolarEnabled, 1)
-	if err == nil && binary.BigEndian.Uint16(b) == 256 {
+	if b, err := wb.conn.ReadHoldingRegisters(cfosRegSolarEnabled, 1); err == nil && binary.BigEndian.Uint16(b)&(1<<8) != 0 {
 		phases1p3p = wb.phases1p3p
 	}
 
-	return decorateCfos(wb, phases1p3p), nil
+	return decorateCfos(wb, power, energy, currents, phases1p3p), nil
 }
 
 // Status implements the api.Charger interface
@@ -140,12 +160,55 @@ func (wb *CfosPowerBrain) MaxCurrentMillis(current float64) error {
 	return err
 }
 
+// currentPower implements the api.Meter interface
+func (wb *CfosPowerBrain) currentPower() (float64, error) {
+	b, err := wb.conn.ReadHoldingRegisters(cfosRegPower, 2)
+	if err != nil {
+		return 0, err
+	}
+
+	return float64(binary.BigEndian.Uint32(b)), nil
+}
+
+// totalEnergy implements the api.MeterEnergy interface
+func (wb *CfosPowerBrain) totalEnergy() (float64, error) {
+	b, err := wb.conn.ReadHoldingRegisters(cfosRegEnergy, 4)
+	if err != nil {
+		return 0, err
+	}
+
+	return float64(binary.BigEndian.Uint64(b)) / 1e3, nil
+}
+
+// currents implements the api.PhaseCurrents interface
+func (wb *CfosPowerBrain) currents() (float64, float64, float64, error) {
+	b, err := wb.conn.ReadHoldingRegisters(cfosRegCurrents, 6)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	var res [3]float64
+	for i := range res {
+		res[i] = float64(binary.BigEndian.Uint32(b[4*i:])) / 10
+	}
+
+	return res[0], res[1], res[2], nil
+}
+
 // phases1p3p implements the api.PhaseSwitcher interface
 func (wb *CfosPowerBrain) phases1p3p(phases int) error {
 	if phases == 3 {
 		phases = 0
 	}
 	_, err := wb.conn.WriteSingleRegister(cfosRegRelaySelect, uint16(phases))
+	return err
+}
+
+var _ api.Resurrector = (*CfosPowerBrain)(nil)
+
+// WakeUp implements the api.Resurrector interface
+func (wb *CfosPowerBrain) WakeUp() error {
+	_, err := wb.conn.WriteSingleRegister(cfosRegDisconnectCp, uint16(5))
 	return err
 }
 

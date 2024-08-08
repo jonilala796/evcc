@@ -5,8 +5,8 @@ import (
 	_ "embed"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
 	"github.com/evcc-io/evcc/util/templates"
+	"github.com/go-sprout/sprout"
 )
 
 type device struct {
@@ -17,15 +17,14 @@ type device struct {
 }
 
 type loadpoint struct {
-	Title             string // TODO Perspektivisch können wir was aus core wiederverwenden, für später
-	Charger           string
-	ChargeMeter       string
-	Vehicle           string
-	Mode              string
-	MinCurrent        int
-	MaxCurrent        int
-	Phases            int
-	ResetOnDisconnect string
+	Title       string // TODO Perspektivisch können wir was aus core wiederverwenden, für später
+	Charger     string
+	ChargeMeter string
+	Vehicle     string
+	Mode        string
+	MinCurrent  int
+	MaxCurrent  int
+	Phases      int
 }
 
 type globalConfig struct {
@@ -117,7 +116,7 @@ var configTmpl string
 
 // RenderConfiguration creates a yaml configuration
 func (c *Configure) RenderConfiguration() ([]byte, error) {
-	tmpl, err := template.New("yaml").Funcs(sprig.TxtFuncMap()).Parse(configTmpl)
+	tmpl, err := template.New("yaml").Funcs(sprout.FuncMap()).Parse(configTmpl)
 	if err != nil {
 		panic(err)
 	}

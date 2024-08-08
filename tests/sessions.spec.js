@@ -1,11 +1,13 @@
-const { test, expect, devices } = require("@playwright/test");
-const { start, stop } = require("./evcc");
+import { test, expect, devices } from "@playwright/test";
+import { start, stop, baseUrl } from "./evcc";
+
+test.use({ baseURL: baseUrl() });
 
 const mobile = devices["iPhone 12 Mini"].viewport;
 const desktop = devices["Desktop Chrome"].viewport;
 
 test.beforeAll(async () => {
-  await start("basics.evcc.yaml", "sessions.sql");
+  await start("basics.evcc.yaml", ["password.sql", "sessions.sql"]);
 });
 test.afterAll(async () => {
   await stop();
@@ -234,17 +236,9 @@ test.describe("columns desktop", async () => {
     await page.goto("/#/sessions?year=2023&month=5");
     await expect(page.getByTestId("vehicle")).toBeVisible();
   });
-  test("hide vehicle column only one exists", async ({ page }) => {
-    await page.goto("/#/sessions?year=2023&month=3");
-    await expect(page.getByTestId("vehicle")).toHaveCount(0);
-  });
   test("show loadpoint column if multiple different exist", async ({ page }) => {
     await page.goto("/#/sessions?year=2023&month=5");
     await expect(page.getByTestId("loadpoint")).toBeVisible();
-  });
-  test("hide loadpoint column only one exists", async ({ page }) => {
-    await page.goto("/#/sessions?year=2023&month=3");
-    await expect(page.getByTestId("loadpoint")).toHaveCount(0);
   });
   test("show co2 column it has values", async ({ page }) => {
     await page.goto("/#/sessions?year=2023&month=3");

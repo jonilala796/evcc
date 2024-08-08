@@ -154,8 +154,8 @@ func (wb *Hesotec) CurrentPower() (float64, error) {
 
 var _ api.ChargeTimer = (*Hesotec)(nil)
 
-// ChargingTime implements the api.ChargeTimer interface
-func (wb *Hesotec) ChargingTime() (time.Duration, error) {
+// ChargeDuration implements the api.ChargeTimer interface
+func (wb *Hesotec) ChargeDuration() (time.Duration, error) {
 	b, err := wb.conn.ReadHoldingRegisters(hesotecRegDuration, 2)
 	if err != nil {
 		return 0, err
@@ -186,7 +186,7 @@ func (wb *Hesotec) Currents() (float64, float64, float64, error) {
 	}
 
 	var res [3]float64
-	for i := 0; i < 3; i++ {
+	for i := range res {
 		res[i] = float64(binary.BigEndian.Uint32(b[4*i:])) / 1e3
 	}
 
@@ -203,7 +203,7 @@ func (wb *Hesotec) Voltages() (float64, float64, float64, error) {
 	}
 
 	var res [3]float64
-	for i := 0; i < 3; i++ {
+	for i := range res {
 		res[i] = float64(binary.BigEndian.Uint16(b[2*i:]))
 	}
 

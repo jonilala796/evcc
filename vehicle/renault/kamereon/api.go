@@ -1,6 +1,7 @@
 package kamereon
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,7 @@ func New(log *util.Logger, keys keys.ConfigServer, identity *gigya.Identity, log
 func (v *API) request_(uri string, body io.Reader) (Response, error) {
 	params := url.Values{"country": []string{"DE"}}
 	headers := map[string]string{
+		"content-type":     "application/vnd.api+json",
 		"x-gigya-id_token": v.identity.Token,
 		"apikey":           v.keys.APIKey,
 	}
@@ -57,12 +59,24 @@ func (v *API) request_(uri string, body io.Reader) (Response, error) {
 }
 
 func (v *API) request(uri string, body io.Reader) (Response, error) {
-	res, err := v.request_(uri, body)
+	if body != nil {
+		b, err := io.ReadAll(body)
+		if err != nil {
+			return Response{}, err
+		}
+		// read from buffer
+		body = bytes.NewReader(b)
+	}
 
+	res, err := v.request_(uri, body)
 	// repeat auth if error
 	if err != nil {
 		if err = v.login(); err == nil {
-			res, err = v.request_(uri, nil)
+			if body != nil {
+				// rewind body
+				body.(*bytes.Reader).Seek(0, io.SeekStart)
+			}
+			res, err = v.request_(uri, body)
 		}
 	}
 
@@ -105,7 +119,7 @@ func (v *API) Hvac(accountID string, vin string) (Response, error) {
 
 // Cockpit provides cockpit api response
 func (v *API) Cockpit(accountID string, vin string) (Response, error) {
-	uri := fmt.Sprintf("%s/commerce/v1/accounts/%s/kamereon/kca/car-adapter/v2/cars/%s/cockpit", v.keys.Target, accountID, vin)
+	uri := fmt.Sprintf("%s/commerce/v1/accounts/%s/kamereon/kca/car-adapter/v1/cars/%s/cockpit", v.keys.Target, accountID, vin)
 	return v.request(uri, nil)
 }
 
