@@ -16,7 +16,6 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/push"
 	"github.com/evcc-io/evcc/server"
-	"github.com/evcc-io/evcc/server/modbus"
 	"github.com/evcc-io/evcc/server/updater"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
@@ -283,12 +282,6 @@ func runRoot(cmd *cobra.Command, args []string) {
 
 	// setup site
 	if err == nil {
-		httpd.RegisterSiteHandlers(site, cache)
-		httpd.RegisterShutdownHandler(func() {
-			log.FATAL.Println("evcc was stopped by user. OS should restart the service. Or restart manually.")
-			once.Do(func() { close(stopC) }) // signal loop to end
-		})
-
 		// set channels
 		site.DumpConfig()
 		site.Prepare(valueChan, pushChan)

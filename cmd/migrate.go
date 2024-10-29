@@ -45,7 +45,6 @@ func runMigrate(cmd *cobra.Command, args []string) {
 		settings.Delete(keys.SponsorToken)
 	} else {
 		settings.SetInt(keys.Interval, int64(conf.Interval))
-		settings.SetString(keys.SponsorToken, conf.SponsorToken)
 	}
 
 	log.DEBUG.Println("- network")

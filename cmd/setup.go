@@ -40,6 +40,7 @@ import (
 	"github.com/evcc-io/evcc/util/locale"
 	"github.com/evcc-io/evcc/util/machine"
 	"github.com/evcc-io/evcc/util/request"
+	"github.com/evcc-io/evcc/util/sponsor"
 	"github.com/evcc-io/evcc/util/templates"
 	"github.com/evcc-io/evcc/vehicle"
 	"github.com/gorilla/handlers"
@@ -418,7 +419,7 @@ func configureVehicles(static []config.Named, names ...string) error {
 		})
 	}
 
-	if err := g.Wait(); err != nil {
+	if err := eg.Wait(); err != nil {
 		return err
 	}
 
@@ -445,7 +446,19 @@ func configureVehicles(static []config.Named, names ...string) error {
 	return nil
 }
 
-func configureEnvironment(cmd *cobra.Command, conf globalConfig) (err error) {
+func configureSponsorship(token string) (err error) {
+	if settings.Exists(keys.SponsorToken) {
+		if token, err = settings.String(keys.SponsorToken); err != nil {
+			return err
+		}
+	}
+
+	// TODO migrate settings
+
+	return sponsor.ConfigureSponsorship(token)
+}
+
+func configureEnvironment(cmd *cobra.Command, conf *globalconfig.All) (err error) {
 	// full http request log
 	if cmd.Flags().Lookup(flagHeaders).Changed {
 		request.LogHeaders = true
@@ -464,16 +477,6 @@ func configureEnvironment(cmd *cobra.Command, conf globalConfig) (err error) {
 	if conf.Plant != "" {
 		// TODO decide wrapping
 		err = machine.CustomID(conf.Plant)
-	}
-
-	// setup translations
-	if err == nil {
-		err = locale.Init()
-	}
-
-	// setup persistence
-	if err == nil && conf.Database.Dsn != "" {
-		err = configureDatabase(conf.Database)
 	}
 
 	// setup mqtt client listener
