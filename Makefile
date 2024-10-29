@@ -14,9 +14,9 @@ LD_FLAGS := -X github.com/evcc-io/evcc/server.Version=$(VERSION) -X github.com/e
 BUILD_ARGS := -trimpath -ldflags='$(LD_FLAGS)'
 
 # docker
-DOCKER_IMAGE := evcc/evcc
+DOCKER_IMAGE := jonilala796/evcc
 DOCKER_TAG := testing
-PLATFORM := linux/amd64,linux/arm64,linux/arm/v6
+PLATFORM := linux/arm64
 
 # gokrazy image
 IMAGE_FILE := evcc_$(TAG_NAME).image
@@ -92,7 +92,7 @@ publish-nightly::
 
 publish-release::
 	@echo Version: $(VERSION) $(SHA) $(BUILD_DATE)
-	docker buildx build --platform $(PLATFORM) --tag $(DOCKER_IMAGE):latest --tag $(DOCKER_IMAGE):$(VERSION) --build-arg TESLA_CLIENT_ID=$(TESLA_CLIENT_ID) --build-arg RELEASE=1 --push .
+	docker buildx build --build-arg RELEASE=1 --platform $(PLATFORM) --tag $(DOCKER_IMAGE):latest --tag $(DOCKER_IMAGE):$(VERSION) --load .
 
 apt-nightly::
 	$(foreach file, $(wildcard $(PACKAGES)/*.deb), \

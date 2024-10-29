@@ -18,10 +18,10 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/api/globalconfig"
 	"github.com/evcc-io/evcc/charger"
+	"github.com/evcc-io/evcc/charger/eebus"
 	"github.com/evcc-io/evcc/cmd/shutdown"
 	"github.com/evcc-io/evcc/core"
-	"github.com/evcc-io/evcc/core/circuit"
-	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/site"
 	"github.com/evcc-io/evcc/hems"
 	"github.com/evcc-io/evcc/meter"
 	"github.com/evcc-io/evcc/provider/golang"
@@ -40,7 +40,6 @@ import (
 	"github.com/evcc-io/evcc/util/locale"
 	"github.com/evcc-io/evcc/util/machine"
 	"github.com/evcc-io/evcc/util/request"
-	"github.com/evcc-io/evcc/util/sponsor"
 	"github.com/evcc-io/evcc/util/templates"
 	"github.com/evcc-io/evcc/vehicle"
 	"github.com/gorilla/handlers"
@@ -419,7 +418,7 @@ func configureVehicles(static []config.Named, names ...string) error {
 		})
 	}
 
-	if err := eg.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 
@@ -446,19 +445,7 @@ func configureVehicles(static []config.Named, names ...string) error {
 	return nil
 }
 
-func configureSponsorship(token string) (err error) {
-	if settings.Exists(keys.SponsorToken) {
-		if token, err = settings.String(keys.SponsorToken); err != nil {
-			return err
-		}
-	}
-
-	// TODO migrate settings
-
-	return sponsor.ConfigureSponsorship(token)
-}
-
-func configureEnvironment(cmd *cobra.Command, conf *globalconfig.All) (err error) {
+func configureEnvironment(cmd *cobra.Command, conf globalConfig) (err error) {
 	// full http request log
 	if cmd.Flags().Lookup(flagHeaders).Changed {
 		request.LogHeaders = true
@@ -479,9 +466,14 @@ func configureEnvironment(cmd *cobra.Command, conf *globalconfig.All) (err error
 		err = machine.CustomID(conf.Plant)
 	}
 
-	// setup sponsorship (allow env override)
+	// setup translations
 	if err == nil {
-		err = wrapErrorWithClass(ClassSponsorship, configureSponsorship(conf.SponsorToken))
+		err = locale.Init()
+	}
+
+	// setup persistence
+	if err == nil && conf.Database.Dsn != "" {
+		err = configureDatabase(conf.Database)
 	}
 
 	// setup mqtt client listener

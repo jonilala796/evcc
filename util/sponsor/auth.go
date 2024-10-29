@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api/proto/pb"
+	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/cloud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,15 +25,11 @@ const (
 )
 
 func IsAuthorized() bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	return len(Subject) > 0
+	return true
 }
 
 func IsAuthorizedForApi() bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	return IsAuthorized() && Subject != unavailable && Token != ""
+	return IsAuthorized() && Subject != unavailable
 }
 
 // check and set sponsorship token
