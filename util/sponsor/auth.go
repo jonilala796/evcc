@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api/proto/pb"
-	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/cloud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

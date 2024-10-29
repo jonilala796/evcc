@@ -20,6 +20,7 @@ package charger
 import (
 	"errors"
 	"fmt"
+	"github.com/hashicorp/go-version"
 	"net/http"
 	"strings"
 	"time"

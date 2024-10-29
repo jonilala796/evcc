@@ -44,7 +44,7 @@ func NewCloudFromConfig(other map[string]interface{}) (api.Vehicle, error) {
 		return nil, err
 	}
 
-	conn, err := cloud.Connection(host)
+	conn, err := cloud.Connection()
 	if err != nil {
 		return nil, err
 	}

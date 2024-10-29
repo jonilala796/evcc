@@ -14,31 +14,30 @@ import (
 )
 
 type All struct {
-	Network      Network
-	Log          string
-	SponsorToken string
-	Plant        string // telemetry plant id
-	Telemetry    bool
-	Metrics      bool
-	Profile      bool
-	Levels       map[string]string
-	Interval     time.Duration
-	Database     DB
-	Mqtt         Mqtt
-	ModbusProxy  []ModbusProxy
-	Javascript   []Javascript
-	Go           []Go
-	Influx       Influx
-	EEBus        eebus.Config
-	HEMS         config.Typed
-	Messaging    Messaging
-	Meters       []config.Named
-	Chargers     []config.Named
-	Vehicles     []config.Named
-	Tariffs      Tariffs
-	Site         map[string]interface{}
-	Loadpoints   []map[string]interface{}
-	Circuits     []config.Named
+	Network     Network
+	Log         string
+	Plant       string // telemetry plant id
+	Telemetry   bool
+	Metrics     bool
+	Profile     bool
+	Levels      map[string]string
+	Interval    time.Duration
+	Database    DB
+	Mqtt        Mqtt
+	ModbusProxy []ModbusProxy
+	Javascript  []Javascript
+	Go          []Go
+	Influx      Influx
+	EEBus       eebus.Config
+	HEMS        config.Typed
+	Messaging   Messaging
+	Meters      []config.Named
+	Chargers    []config.Named
+	Vehicles    []config.Named
+	Tariffs     Tariffs
+	Site        map[string]interface{}
+	Loadpoints  []map[string]interface{}
+	Circuits    []config.Named
 }
 
 type Javascript struct {
